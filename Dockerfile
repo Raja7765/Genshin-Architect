@@ -2,8 +2,11 @@
 FROM eclipse-temurin:21-jdk-alpine as build
 WORKDIR /app
 
-# Copy the 'src' folder (where your pom.xml lives)
+# Copy the 'src' folder contents to /app
 COPY src/ .
+
+# 🌟 THE FIX: Give the script permission to run
+RUN chmod +x mvnw
 
 # Build the app and skip tests for speed
 RUN ./mvnw clean package -DskipTests
