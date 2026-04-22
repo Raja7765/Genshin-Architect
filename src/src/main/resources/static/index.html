@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Genshin Architect</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <h1>✦ Genshin Architect ✦</h1>
+
+    <div class="pity-dashboard">
+        <h2>✨ Intertwined Fate Predictor ✨</h2>
+        <p>How many wishes have you made since your last 5-Star?</p>
+        <input type="number" id="pityInput" class="pity-input" value="0" min="0" max="90" oninput="calculatePity()">
+        <div id="pityResult" class="pity-result safe">0 / 90 - Safe Zone. Keep Wishing!</div>
+    </div>
+
+    <div class="container">
+        <div class="form-card">
+            <h2>Summon Character</h2>
+            <input type="text" id="charName" placeholder="Name (e.g., Raiden)">
+            <input type="text" id="charElement" placeholder="Element (e.g., Electro)">
+            <input type="number" id="charRarity" placeholder="Rarity (4 or 5)">
+            <input type="text" id="charImage" placeholder="Image URL (e.g., https://...)">
+            <button onclick="sendDataToDatabase()">Save to Roster</button>
+        </div>
+
+        <div class="roster">
+            <div class="filter-section">
+                <input type="text" id="searchInput" placeholder="Search by name..." onkeyup="filterCharacters()">
+                <div class="element-buttons">
+                    <button onclick="filterByElement('All')">All</button>
+                    <button onclick="filterByElement('Pyro')">Pyro</button>
+                    <button onclick="filterByElement('Hydro')">Hydro</button>
+                    <button onclick="filterByElement('Anemo')">Anemo</button>
+                    <button onclick="filterByElement('Electro')">Electro</button>
+                    <button onclick="filterByElement('Dendro')">Dendro</button>
+                    <button onclick="filterByElement('Cryo')">Cryo</button>
+                    <button onclick="filterByElement('Geo')">Geo</button>
+                </div>
+            </div>
+
+            <div id="rosterList"></div>
+
+            <div class="pagination-controls">
+                <button id="prevBtn" class="page-btn" onclick="changePage(-1)">Previous</button>
+                <span id="pageDisplay">Page 1</span>
+                <button id="nextBtn" class="page-btn" onclick="changePage(1)">Next</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentEditId = null; 
+        let allCharacters = []; 
+        let currentPage = 0; // 🌟 Track current page
+        let totalPages = 0;
+
+        window.onload = loadCharacters;
+
+        function loadCharacters() {
+            // Updated to use paged-characters endpoint
+            fetch(`/paged-characters?page=${currentPage}`)
+                .then(response => response.json())
+                .then(data => {
+                    // In pagination, the actual list is inside 'data.content'
+                    allCharacters = data.content; 
+                    totalPages = data.totalPages;
+                    renderRoster(data.content);
+                    updatePaginationUI();
+                });
+        }
+
+        function renderRoster(data) {
+            const roster = document.getElementById('rosterList');
+            roster.innerHTML = ''; 
+            data.forEach(char => {
+                let safeImage = char.imageUrl ? char.imageUrl : 'https://dummyimage.com/60x60/2b2b36/d4af37&text=?';
+                roster.innerHTML += `
+                    <div class="character-card">
+                        <div class="char-info-container">
+                            <img src="${safeImage}" class="avatar" alt="avatar">
+                            <div>
+                                <h3 class="char-name-text">${char.name}</h3>
+                                <p class="char-element-text">Element: ${char.element}</p>
+                            </div>
+                        </div>
+                        <div class="card-right-side">
+                            <div class="star">${char.rarity} ✦</div>
+                            <button class="edit-btn" onclick="loadIntoForm(${char.id})">Edit</button>
+                            <button class="delete-btn" onclick="deleteCharacter(${char.id})">X</button>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        // 🌟 Handle Page Changes
+        function changePage(step) {
+            currentPage += step;
+            loadCharacters();
+        }
+
+        // 🌟 Update Button Visibility
+        function updatePaginationUI() {
+            document.getElementById("pageDisplay").innerText = `Page ${currentPage + 1} of ${totalPages || 1}`;
+            document.getElementById("prevBtn").disabled = (currentPage === 0);
+            document.getElementById("nextBtn").disabled = (currentPage >= totalPages - 1 || totalPages === 0);
+        }
+
+        function loadIntoForm(id) {
+            let char = allCharacters.find(c => c.id === id);
+            document.getElementById("charName").value = char.name;
+            document.getElementById("charElement").value = char.element;
+            document.getElementById("charRarity").value = char.rarity;
+            document.getElementById("charImage").value = char.imageUrl || '';
+            currentEditId = char.id; 
+            document.querySelector(".form-card button").innerText = "Update Character"; 
+        }
+
+        function sendDataToDatabase() {
+    let characterData = {
+        name: document.getElementById("charName").value,
+        element: document.getElementById("charElement").value,
+        rarity: document.getElementById("charRarity").value,
+        imageUrl: document.getElementById("charImage").value
+    };
+
+    let url = currentEditId !== null ? `/update-character/${currentEditId}` : '/add-character';
+    let methodType = currentEditId !== null ? 'PUT' : 'POST';
+
+    fetch(url, {
+        method: methodType,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(characterData)
+    })
+    .then(response => {
+        // 🌟 NEW: Check if the Security Gatekeeper blocked the request
+        if (!response.ok) {
+            if (response.status === 400) {
+                alert("❌ Validation Error: Please check your inputs!\n- Name: 2-50 chars\n- Rarity: 1 to 5");
+            } else {
+                alert("❌ Something went wrong on the server.");
+            }
+            throw new Error("Validation failed");
+        }
+        return response.text();
+    })
+    .then(() => {
+        resetForm();
+        loadCharacters(); 
+    })
+    .catch(error => console.error("Error:", error));
+}
+
+        function resetForm() {
+            document.getElementById("charName").value = '';
+            document.getElementById("charElement").value = '';
+            document.getElementById("charRarity").value = '';
+            document.getElementById("charImage").value = ''; 
+            currentEditId = null;
+            document.querySelector(".form-card button").innerText = "Save to Roster";
+        }
+
+        function deleteCharacter(id) {
+            if (confirm("Banish this character?")) {
+                fetch(`/delete-character/${id}`, { method: 'DELETE' })
+                    .then(() => loadCharacters());
+            }
+        }
+
+        // Backend Search & Filter (Temporarily overrides pagination view)
+        function filterCharacters() {
+            let searchText = document.getElementById("searchInput").value;
+            if (!searchText.trim()) { loadCharacters(); return; }
+            fetch(`/search-characters?name=${searchText}`)
+                .then(res => res.json())
+                .then(data => renderRoster(data));
+        }
+
+        function filterByElement(elementName) {
+            if (elementName === 'All') { loadCharacters(); return; }
+            fetch(`/filter-characters?element=${elementName}`)
+                .then(res => res.json())
+                .then(data => renderRoster(data));
+        }
+
+        function calculatePity() {
+            let pity = document.getElementById("pityInput").value;
+            let resultDiv = document.getElementById("pityResult");
+            if (pity < 0) pity = 0; if (pity > 90) pity = 90;
+            if (pity < 74) {
+                resultDiv.innerHTML = `${pity} / 90 - Safe Zone.`;
+                resultDiv.className = "pity-result safe"; 
+            } else if (pity < 90) {
+                resultDiv.innerHTML = `⚠️ ${pity} / 90 - SOFT PITY!`;
+                resultDiv.className = "pity-result soft-pity"; 
+            } else {
+                resultDiv.innerHTML = `🌟 90 / 90 - HARD PITY!`;
+                resultDiv.className = "pity-result hard-pity"; 
+            }
+        }
+    </script>
+</body>
+</html>
